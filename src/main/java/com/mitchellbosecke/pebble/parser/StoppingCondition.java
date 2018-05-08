@@ -19,11 +19,8 @@ import com.mitchellbosecke.pebble.lexer.Token;
  * 
  * @author Mitchell
  * 
- * @param <T>
- *            The type of arguments. Usually "List<Object>" in order to receive
- *            multiple arguments.
  */
 public interface StoppingCondition {
 
-    public boolean evaluate(Token data);
+    boolean evaluate(Token data);
 }

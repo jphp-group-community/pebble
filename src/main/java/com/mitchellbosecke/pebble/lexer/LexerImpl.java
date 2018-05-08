@@ -1,24 +1,13 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ * <p>
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ * <p>
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.lexer;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import com.mitchellbosecke.pebble.PebbleEngine;
 import com.mitchellbosecke.pebble.error.ParserException;
 import com.mitchellbosecke.pebble.lexer.Token.Type;
 import com.mitchellbosecke.pebble.operator.BinaryOperator;
@@ -27,12 +16,38 @@ import com.mitchellbosecke.pebble.utils.Pair;
 import com.mitchellbosecke.pebble.utils.StringLengthComparator;
 import com.mitchellbosecke.pebble.utils.StringUtils;
 
-public class LexerImpl implements Lexer {
+import java.io.IOException;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * This class reads the template input and builds single items out of it.
+ * <p>
+ * This class is not thread safe.
+ */
+public final class LexerImpl implements Lexer {
 
     /**
-     * Main components
+     * Syntax
      */
-    private final PebbleEngine engine;
+    private final Syntax syntax;
+
+    /**
+     * Unary operators
+     */
+    private final Collection<UnaryOperator> unaryOperators;
+
+    /**
+     * Binary operators
+     */
+    private final Collection<BinaryOperator> binaryOperators;
 
     /**
      * As we progress through the source we maintain a string which is the text
@@ -51,53 +66,6 @@ public class LexerImpl implements Lexer {
     private LinkedList<Pair<String, Integer>> brackets;
 
     /**
-     * The different delimiters which change the state of the lexer. The regular
-     * expressions used to find these delimiters are dynamically generated. They
-     * are safe to change via the getter/setter methods.
-     * 
-     */
-    private String delimiterCommentOpen = "{#";
-
-    private String delimiterCommentClose = "#}";
-
-    private String delimiterExecuteOpen = "{%";
-
-    private String delimiterExecuteClose = "%}";
-
-    private String delimiterPrintOpen = "{{";
-
-    private String delimiterPrintClose = "}}";
-
-    private String whitespaceTrim = "-";
-
-    /**
-     * The regular expressions used to find the different delimiters
-     */
-    private Pattern regexPrintClose;
-
-    private Pattern regexExecuteClose;
-
-    private Pattern regexCommentClose;
-
-    private Pattern regexStartDelimiters;
-
-    private Pattern regexLeadingWhitespaceTrim;
-
-    private Pattern regexTrailingWhitespaceTrim;
-
-    /**
-     * Regular expressions used to find "verbatim" and "endverbatim" tags.
-     */
-    private Pattern regexVerbatimStart;
-
-    private Pattern regexVerbatimEnd;
-    
-    /**
-     * Regular expression to find operators
-     */
-    private Pattern regexOperators;
-
-    /**
      * The state of the lexer is important so that we know what to expect next
      * and to help discover errors in the template (ex. unclosed comments).
      */
@@ -105,9 +73,9 @@ public class LexerImpl implements Lexer {
 
     private LinkedList<State> states;
 
-    private static enum State {
+    private enum State {
         DATA, EXECUTE, PRINT, COMMENT
-    };
+    }
 
     /**
      * If we encountered an END delimiter that was preceded with a whitespace
@@ -126,59 +94,37 @@ public class LexerImpl implements Lexer {
 
     // the negative lookbehind assertion is used to ignore escaped quotation
     // marks
-    private static final Pattern REGEX_STRING = Pattern.compile("((\").*?(?<!\\\\)(\"))|((').*?(?<!\\\\)('))",
-            Pattern.DOTALL);
+    private static final Pattern REGEX_STRING = Pattern
+            .compile("((\").*?(?<!\\\\)(\"))|((').*?(?<!\\\\)('))", Pattern.DOTALL);
 
     private static final String PUNCTUATION = "()[]{}?:.,|=";
 
     /**
-     * Constructor
-     * 
-     * @param engine
-     *            The PebbleEngine that the lexer can use to get information
-     *            from
+     * Regular expression to find operators
      */
-    public LexerImpl(PebbleEngine engine) {
-        this.engine = engine;
+    private Pattern regexOperators;
 
-        String possibleNewline = "(\r\n|\n\r|\r|\n|\u0085|\u2028|\u2029)?";
-
-        // regexes used to find the individual delimiters
-        this.regexPrintClose = Pattern.compile("^\\s*" + Pattern.quote(whitespaceTrim) + "?"
-                + Pattern.quote(delimiterPrintClose) + possibleNewline);
-        this.regexExecuteClose = Pattern.compile("^\\s*" + Pattern.quote(whitespaceTrim) + "?"
-                + Pattern.quote(delimiterExecuteClose) + possibleNewline);
-        this.regexCommentClose = Pattern.compile(Pattern.quote(delimiterCommentClose) + possibleNewline);
-
-        // combination regex used to find the next START delimiter of any kind
-        this.regexStartDelimiters = Pattern.compile(Pattern.quote(delimiterPrintOpen) + "|"
-                + Pattern.quote(delimiterExecuteOpen) + "|" + Pattern.quote(delimiterCommentOpen));
-
-        // regex to find the verbatim tag
-        this.regexVerbatimStart = Pattern.compile("^\\s*verbatim\\s*(" + Pattern.quote(whitespaceTrim) + ")?"
-                + Pattern.quote(delimiterExecuteClose) + possibleNewline);
-        this.regexVerbatimEnd = Pattern.compile(Pattern.quote(delimiterExecuteOpen) + "("
-                + Pattern.quote(whitespaceTrim) + ")?" + "\\s*endverbatim\\s*(" + Pattern.quote(whitespaceTrim) + ")?"
-                + Pattern.quote(delimiterExecuteClose) + possibleNewline);
-
-        // regex for the whitespace trim character
-        this.regexLeadingWhitespaceTrim = Pattern.compile(Pattern.quote(whitespaceTrim) + "\\s+");
-        this.regexTrailingWhitespaceTrim = Pattern.compile("^\\s*" + Pattern.quote(whitespaceTrim) + "("
-                + Pattern.quote(delimiterPrintClose) + "|" + Pattern.quote(delimiterExecuteClose) + "|"
-                + Pattern.quote(delimiterCommentClose) + ")");
+    /**
+     * Constructor
+     *
+     * @param syntax          The primary syntax
+     * @param unaryOperators  The available unary operators
+     * @param binaryOperators The available binary operators
+     */
+    public LexerImpl(Syntax syntax, Collection<UnaryOperator> unaryOperators, Collection<BinaryOperator> binaryOperators) {
+        this.syntax = syntax;
+        this.unaryOperators = unaryOperators;
+        this.binaryOperators = binaryOperators;
     }
 
     /**
      * This is the main method used to tokenize the raw contents of a template.
-     * 
-     * @param originalSource
-     *            The raw contents of the template
-     * @param name
-     *            The name of the template (used for meaningful error messages)
-     * @throws ParserException
+     *
+     * @param reader The reader provided from the Loader
+     * @param name   The name of the template (used for meaningful error messages)
      */
     @Override
-    public TokenStream tokenize(Reader reader, String name) throws ParserException {
+    public TokenStream tokenize(Reader reader, String name) {
 
         // operator regex
         buildOperatorRegex();
@@ -203,25 +149,25 @@ public class LexerImpl implements Lexer {
         /*
          * loop through the entire source and apply different lexing methods
          * depending on what kind of state we are in at the time.
-         * 
+         *
          * This will always start on lexData();
          */
         while (this.source.length() > 0) {
             switch (this.state) {
-            case DATA:
-                lexData();
-                break;
-            case EXECUTE:
-                lexExecute();
-                break;
-            case PRINT:
-                lexPrint();
-                break;
-            case COMMENT:
-                lexComment();
-                break;
-            default:
-                break;
+                case DATA:
+                    lexData();
+                    break;
+                case EXECUTE:
+                    lexExecute();
+                    break;
+                case PRINT:
+                    lexPrint();
+                    break;
+                case COMMENT:
+                    lexComment();
+                    break;
+                default:
+                    break;
             }
 
         }
@@ -244,12 +190,10 @@ public class LexerImpl implements Lexer {
      * meaningful delimiters. We are currently looking for the next "open" or
      * "start" delimiter, ex. the opening comment delimiter, or the opening
      * variable delimiter.
-     * 
-     * @throws ParserException
      */
-    private void lexData() throws ParserException {
+    private void lexData() {
         // find the next start delimiter
-        Matcher matcher = regexStartDelimiters.matcher(source);
+        Matcher matcher = this.syntax.getRegexStartDelimiters().matcher(source);
         boolean match = matcher.find();
 
         String text;
@@ -280,20 +224,20 @@ public class LexerImpl implements Lexer {
 
             checkForLeadingWhitespaceTrim(textToken);
 
-            if (delimiterCommentOpen.equals(startDelimiterToken)) {
+            if (this.syntax.getCommentOpenDelimiter().equals(startDelimiterToken)) {
 
                 // we don't actually push any tokens for comments
                 pushState(State.COMMENT);
 
-            } else if (delimiterPrintOpen.equals(startDelimiterToken)) {
+            } else if (this.syntax.getPrintOpenDelimiter().equals(startDelimiterToken)) {
 
                 pushToken(Token.Type.PRINT_START);
                 pushState(State.PRINT);
 
-            } else if (delimiterExecuteOpen.equals(startDelimiterToken)) {
+            } else if ((this.syntax.getExecuteOpenDelimiter().equals(startDelimiterToken))) {
 
                 // check for verbatim tag
-                Matcher verbatimStartMatcher = regexVerbatimStart.matcher(source);
+                Matcher verbatimStartMatcher = this.syntax.getRegexVerbatimStart().matcher(source);
                 if (verbatimStartMatcher.lookingAt()) {
 
                     lexVerbatimData(verbatimStartMatcher);
@@ -313,19 +257,17 @@ public class LexerImpl implements Lexer {
 
     /**
      * Tokenizes between execute delimiters.
-     * 
-     * @throws ParserException
      */
-    private void lexExecute() throws ParserException {
+    private void lexExecute() {
 
         // check for the trailing whitespace trim character
         checkForTrailingWhitespaceTrim();
 
-        Matcher matcher = regexExecuteClose.matcher(source);
+        Matcher matcher = this.syntax.getRegexExecuteClose().matcher(source);
 
         // check if we are at the execute closing delimiter
         if (brackets.isEmpty() && matcher.lookingAt()) {
-            pushToken(Token.Type.EXECUTE_END, delimiterExecuteClose);
+            pushToken(Token.Type.EXECUTE_END, this.syntax.getExecuteCloseDelimiter());
             source.advance(matcher.end());
             popState();
         } else {
@@ -335,19 +277,17 @@ public class LexerImpl implements Lexer {
 
     /**
      * Tokenizes between print delimiters.
-     * 
-     * @throws ParserException
      */
-    private void lexPrint() throws ParserException {
+    private void lexPrint() {
 
         // check for the trailing whitespace trim character
         checkForTrailingWhitespaceTrim();
 
-        Matcher matcher = regexPrintClose.matcher(source);
+        Matcher matcher = this.syntax.getRegexPrintClose().matcher(source);
 
         // check if we are at the print closing delimiter
         if (brackets.isEmpty() && matcher.lookingAt()) {
-            pushToken(Token.Type.PRINT_END, delimiterPrintClose);
+            pushToken(Token.Type.PRINT_END, this.syntax.getPrintCloseDelimiter());
             source.advance(matcher.end());
             popState();
         } else {
@@ -357,16 +297,14 @@ public class LexerImpl implements Lexer {
 
     /**
      * Tokenizes between comment delimiters.
-     * 
+     * <p>
      * Simply find the closing delimiter for the comment and move the cursor to
      * that point.
-     * 
-     * @throws ParserException
      */
-    private void lexComment() throws ParserException {
+    private void lexComment() {
 
         // all we need to do is find the end of the comment.
-        Matcher matcher = regexCommentClose.matcher(source);
+        Matcher matcher = this.syntax.getRegexCommentClose().matcher(source);
 
         boolean match = matcher.find(0);
         if (!match) {
@@ -379,7 +317,7 @@ public class LexerImpl implements Lexer {
          */
         String comment = source.substring(matcher.start());
         String reversedComment = new StringBuilder(comment).reverse().toString();
-        Matcher whitespaceTrimMatcher = regexLeadingWhitespaceTrim.matcher(reversedComment);
+        Matcher whitespaceTrimMatcher = this.syntax.getRegexLeadingWhitespaceTrim().matcher(reversedComment);
         if (whitespaceTrimMatcher.lookingAt()) {
             this.trimLeadingWhitespaceFromNextData = true;
         }
@@ -392,20 +330,16 @@ public class LexerImpl implements Lexer {
     /**
      * Tokenizing an expression which can be found within both execute and print
      * regions.
-     * 
-     * @throws ParserException
      */
-    private void lexExpression() throws ParserException {
+    private void lexExpression() {
         String token;
 
         // whitespace
         source.advanceThroughWhitespace();
         /*
-        Matcher matcher = REGEX_WHITESPACE.matcher(source);
-        if (matcher.lookingAt()) {
-            source.advance(matcher.end());
-        }
-        */
+         * Matcher matcher = REGEX_WHITESPACE.matcher(source); if
+         * (matcher.lookingAt()) { source.advance(matcher.end()); }
+         */
 
         // operators
         Matcher matcher = regexOperators.matcher(source);
@@ -498,7 +432,7 @@ public class LexerImpl implements Lexer {
 
     private void checkForLeadingWhitespaceTrim(Token leadingToken) {
 
-        Matcher whitespaceTrimMatcher = regexLeadingWhitespaceTrim.matcher(source);
+        Matcher whitespaceTrimMatcher = this.syntax.getRegexLeadingWhitespaceTrim().matcher(source);
 
         if (whitespaceTrimMatcher.lookingAt()) {
             if (leadingToken != null) {
@@ -510,7 +444,7 @@ public class LexerImpl implements Lexer {
     }
 
     private void checkForTrailingWhitespaceTrim() {
-        Matcher whitespaceTrimMatcher = regexTrailingWhitespaceTrim.matcher(source);
+        Matcher whitespaceTrimMatcher = this.syntax.getRegexTrailingWhitespaceTrim().matcher(source);
 
         if (whitespaceTrimMatcher.lookingAt()) {
             this.trimLeadingWhitespaceFromNextData = true;
@@ -519,17 +453,15 @@ public class LexerImpl implements Lexer {
 
     /**
      * Implementation of the "verbatim" tag
-     * 
-     * @throws ParserException
      */
-    private void lexVerbatimData(Matcher verbatimStartMatcher) throws ParserException {
+    private void lexVerbatimData(Matcher verbatimStartMatcher) {
 
         // move cursor past the opening verbatim tag
         source.advance(verbatimStartMatcher.end());
 
         // look for the "endverbatim" tag and storing everything between
         // now and then into a TEXT node
-        Matcher verbatimEndMatcher = regexVerbatimEnd.matcher(source);
+        Matcher verbatimEndMatcher = this.syntax.getRegexVerbatimEnd().matcher(source);
 
         // check for EOF
         if (!verbatimEndMatcher.find()) {
@@ -562,9 +494,8 @@ public class LexerImpl implements Lexer {
      * Create a Token of a certain type but has no particular value. This will
      * pass control to the overloaded method that will push this token into a
      * list of tokens that we are maintaining.
-     * 
-     * @param type
-     *            The type of Token we are creating
+     *
+     * @param type The type of Token we are creating
      */
     private Token pushToken(Token.Type type) {
         return pushToken(type, null);
@@ -572,12 +503,10 @@ public class LexerImpl implements Lexer {
 
     /**
      * Create a Token of a certain type and value and push it into the list of
-     * tokens that we are maintaining.
-     * `
-     * @param type
-     *            The type of token we are creating
-     * @param value
-     *            The value of the new token
+     * tokens that we are maintaining. `
+     *
+     * @param type  The type of token we are creating
+     * @param value The value of the new token
      */
     private Token pushToken(Token.Type type, String value) {
         // ignore empty text tokens
@@ -593,9 +522,8 @@ public class LexerImpl implements Lexer {
     /**
      * Pushes the current state onto the stack and then updates the current
      * state to the new state.
-     * 
-     * @param state
-     *            The new state to use as the current state
+     *
+     * @param state The new state to use as the current state
      */
     private void pushState(State state) {
         this.states.push(this.state);
@@ -610,111 +538,21 @@ public class LexerImpl implements Lexer {
     }
 
     /**
-     * @return the commentOpenDelimiter
-     */
-    public String getCommentOpenDelimiter() {
-        return delimiterCommentOpen;
-    }
-
-    /**
-     * @param commentOpenDelimiter
-     *            the commentOpenDelimiter to set
-     */
-    public void setCommentOpenDelimiter(String commentOpenDelimiter) {
-        this.delimiterCommentOpen = commentOpenDelimiter;
-    }
-
-    /**
-     * @return the commentCloseDelimiter
-     */
-    public String getCommentCloseDelimiter() {
-        return delimiterCommentClose;
-    }
-
-    /**
-     * @param commentCloseDelimiter
-     *            the commentCloseDelimiter to set
-     */
-    public void setCommentCloseDelimiter(String commentCloseDelimiter) {
-        this.delimiterCommentClose = commentCloseDelimiter;
-    }
-
-    /**
-     * @return the executeOpenDelimiter
-     */
-    public String getExecuteOpenDelimiter() {
-        return delimiterExecuteOpen;
-    }
-
-    /**
-     * @param executeOpenDelimiter
-     *            the executeOpenDelimiter to set
-     */
-    public void setExecuteOpenDelimiter(String executeOpenDelimiter) {
-        this.delimiterExecuteOpen = executeOpenDelimiter;
-    }
-
-    /**
-     * @return the executeCloseDelimiter
-     */
-    public String getExecuteCloseDelimiter() {
-        return delimiterExecuteClose;
-    }
-
-    /**
-     * @param executeCloseDelimiter
-     *            the executeCloseDelimiter to set
-     */
-    public void setExecuteCloseDelimiter(String executeCloseDelimiter) {
-        this.delimiterExecuteClose = executeCloseDelimiter;
-    }
-
-    /**
-     * @return the printOpenDelimiter
-     */
-    public String getPrintOpenDelimiter() {
-        return delimiterPrintOpen;
-    }
-
-    /**
-     * @param printOpenDelimiter
-     *            the printOpenDelimiter to set
-     */
-    public void setPrintOpenDelimiter(String printOpenDelimiter) {
-        this.delimiterPrintOpen = printOpenDelimiter;
-    }
-
-    /**
-     * @return the printCloseDelimiter
-     */
-    public String getPrintCloseDelimiter() {
-        return delimiterPrintClose;
-    }
-
-    /**
-     * @param printCloseDelimiter
-     *            the printCloseDelimiter to set
-     */
-    public void setPrintCloseDelimiter(String printCloseDelimiter) {
-        this.delimiterPrintClose = printCloseDelimiter;
-    }
-
-    /**
      * Retrieves the operators (both unary and binary) from the PebbleEngine and
      * then dynamically creates one giant regular expression to detect for the
      * existence of one of these operators.
-     * 
+     *
      * @return Pattern The regular expression used to find an operator
      */
     private void buildOperatorRegex() {
 
         List<String> operators = new ArrayList<>();
 
-        for (UnaryOperator operator : engine.getUnaryOperators().values()) {
+        for (UnaryOperator operator : unaryOperators) {
             operators.add(operator.getSymbol());
         }
 
-        for (BinaryOperator operator : engine.getBinaryOperators().values()) {
+        for (BinaryOperator operator : binaryOperators) {
             operators.add(operator.getSymbol());
         }
 
@@ -743,20 +581,13 @@ public class LexerImpl implements Lexer {
              * is NOT an alpha character. This ensures user can type
              * "organization" without the "or" being parsed as an operator.
              */
-            if (Character.isAlphabetic(operator.charAt(operator.length() - 1))) {
+            char nextChar = operator.charAt(operator.length() - 1);
+            if (Character.isLetter(nextChar) || Character.getType(nextChar) == Character.LETTER_NUMBER) {
                 regex.append("(?![a-zA-Z])");
             }
         }
 
         this.regexOperators = Pattern.compile(regex.toString());
-    }
-
-    public String getWhitespaceTrim() {
-        return whitespaceTrim;
-    }
-
-    public void setWhitespaceTrim(String whitespaceTrim) {
-        this.whitespaceTrim = whitespaceTrim;
     }
 
 }

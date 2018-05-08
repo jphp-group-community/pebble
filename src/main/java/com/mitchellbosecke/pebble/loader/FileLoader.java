@@ -1,12 +1,18 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.loader;
+
+import com.mitchellbosecke.pebble.error.LoaderException;
+import com.mitchellbosecke.pebble.utils.PathUtils;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -17,19 +23,14 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.mitchellbosecke.pebble.error.LoaderException;
-
 /**
  * This loader searches for a file located anywhere on the filesystem. It uses
  * java.io.File to perform the lookup.
- * 
+ *
  * @author mbosecke
  *
  */
-public class FileLoader implements Loader {
+public class FileLoader implements Loader<String> {
 
     private static final Logger logger = LoggerFactory.getLogger(FileLoader.class);
 
@@ -40,15 +41,15 @@ public class FileLoader implements Loader {
     private String charset = "UTF-8";
 
     @Override
-    public Reader getReader(String templateName) throws LoaderException {
+    public Reader getReader(String templateName) {
 
-        InputStreamReader isr = null;
+        InputStreamReader isr;
         Reader reader = null;
 
         InputStream is = null;
 
         // add the prefix and ensure the prefix ends with a separator character
-        StringBuilder path = new StringBuilder("");
+        StringBuilder path = new StringBuilder();
         if (getPrefix() != null) {
 
             path.append(getPrefix());
@@ -58,8 +59,9 @@ public class FileLoader implements Loader {
             }
         }
 
-        String location = path.toString() + templateName + (getSuffix() == null ? "" : getSuffix());
-        logger.debug("Looking for template in {}.", location);
+        templateName = templateName + (getSuffix() == null ? "" : getSuffix());
+
+        logger.debug("Looking for template in {}{}.", path.toString(), templateName);
 
         /*
          * if template name contains path segments, move those segments into the
@@ -88,7 +90,7 @@ public class FileLoader implements Loader {
         }
 
         if (is == null) {
-            throw new LoaderException(null, "Could not find template \"" + location + "\"");
+            throw new LoaderException(null, "Could not find template \"" + path.toString() + templateName + "\"");
         }
 
         try {
@@ -125,5 +127,15 @@ public class FileLoader implements Loader {
     @Override
     public void setCharset(String charset) {
         this.charset = charset;
+    }
+
+    @Override
+    public String resolveRelativePath(String relativePath, String anchorPath) {
+        return PathUtils.resolveRelativePath(relativePath, anchorPath, File.separatorChar);
+    }
+
+    @Override
+    public String createCacheKey(String templateName) {
+       return templateName;
     }
 }

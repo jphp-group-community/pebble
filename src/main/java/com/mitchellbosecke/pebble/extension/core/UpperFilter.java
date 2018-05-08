@@ -8,10 +8,10 @@
  ******************************************************************************/
 package com.mitchellbosecke.pebble.extension.core;
 
+import com.mitchellbosecke.pebble.extension.Filter;
+
 import java.util.List;
 import java.util.Map;
-
-import com.mitchellbosecke.pebble.extension.Filter;
 
 public class UpperFilter implements Filter {
 
@@ -25,7 +25,7 @@ public class UpperFilter implements Filter {
         if (input == null) {
             return null;
         }
-        return ((String) input).toUpperCase();
+        return ((String)input).toUpperCase();
     }
 
 }

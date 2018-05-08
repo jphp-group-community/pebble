@@ -1,14 +1,13 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.node.expression;
 
-import com.mitchellbosecke.pebble.error.PebbleException;
 import com.mitchellbosecke.pebble.extension.NodeVisitor;
 import com.mitchellbosecke.pebble.template.EvaluationContext;
 import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
@@ -17,8 +16,11 @@ public class LiteralStringExpression implements Expression<String> {
 
     private final String value;
 
-    public LiteralStringExpression(String value) {
+    private final int lineNumber;
+
+    public LiteralStringExpression(String value, int lineNumber) {
         this.value = value;
+        this.lineNumber = lineNumber;
     }
 
     @Override
@@ -27,7 +29,16 @@ public class LiteralStringExpression implements Expression<String> {
     }
 
     @Override
-    public String evaluate(PebbleTemplateImpl self, EvaluationContext context) throws PebbleException {
+    public String evaluate(PebbleTemplateImpl self, EvaluationContext context) {
+        return value;
+    }
+
+    @Override
+    public int getLineNumber() {
+        return this.lineNumber;
+    }
+
+    public String getValue() {
         return value;
     }
 

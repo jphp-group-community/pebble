@@ -1,40 +1,40 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.tokenParser;
 
-import com.mitchellbosecke.pebble.error.ParserException;
 import com.mitchellbosecke.pebble.lexer.Token;
 import com.mitchellbosecke.pebble.lexer.TokenStream;
 import com.mitchellbosecke.pebble.node.ArgumentsNode;
 import com.mitchellbosecke.pebble.node.BodyNode;
 import com.mitchellbosecke.pebble.node.MacroNode;
 import com.mitchellbosecke.pebble.node.RenderableNode;
+import com.mitchellbosecke.pebble.parser.Parser;
 import com.mitchellbosecke.pebble.parser.StoppingCondition;
 
 public class MacroTokenParser extends AbstractTokenParser {
 
     @Override
-    public RenderableNode parse(Token token) throws ParserException {
+    public RenderableNode parse(Token token, Parser parser) {
 
-        TokenStream stream = this.parser.getStream();
+        TokenStream stream = parser.getStream();
 
         // skip over the 'macro' token
         stream.next();
 
         String macroName = stream.expect(Token.Type.NAME).getValue();
 
-        ArgumentsNode args = this.parser.getExpressionParser().parseArguments(true);
+        ArgumentsNode args = parser.getExpressionParser().parseArguments(true);
 
         stream.expect(Token.Type.EXECUTE_END);
 
         // parse the body
-        BodyNode body = this.parser.subparse(decideMacroEnd);
+        BodyNode body = parser.subparse(decideMacroEnd);
 
         // skip the 'endmacro' token
         stream.next();

@@ -1,30 +1,24 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.extension.escaper;
-
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
 
 import com.mitchellbosecke.pebble.extension.AbstractNodeVisitor;
 import com.mitchellbosecke.pebble.node.ArgumentsNode;
 import com.mitchellbosecke.pebble.node.AutoEscapeNode;
 import com.mitchellbosecke.pebble.node.NamedArgumentNode;
 import com.mitchellbosecke.pebble.node.PrintNode;
-import com.mitchellbosecke.pebble.node.expression.BlockFunctionExpression;
-import com.mitchellbosecke.pebble.node.expression.Expression;
-import com.mitchellbosecke.pebble.node.expression.FilterExpression;
-import com.mitchellbosecke.pebble.node.expression.FilterInvocationExpression;
-import com.mitchellbosecke.pebble.node.expression.FunctionOrMacroInvocationExpression;
-import com.mitchellbosecke.pebble.node.expression.LiteralStringExpression;
-import com.mitchellbosecke.pebble.node.expression.ParentFunctionExpression;
-import com.mitchellbosecke.pebble.node.expression.TernaryExpression;
+import com.mitchellbosecke.pebble.node.expression.*;
+import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
 
 public class EscaperNodeVisitor extends AbstractNodeVisitor {
 
@@ -32,12 +26,9 @@ public class EscaperNodeVisitor extends AbstractNodeVisitor {
 
     private final LinkedList<Boolean> active = new LinkedList<>();
 
-    private final List<String> safeFilters = new ArrayList<>();
-
-    public EscaperNodeVisitor() {
-        safeFilters.add("raw");
-        safeFilters.add("escape");
-        safeFilters.add("date");
+    public EscaperNodeVisitor(PebbleTemplateImpl template, boolean autoEscapting) {
+        super(template);
+        this.pushAutoEscapeState(autoEscapting);
     }
 
     @Override
@@ -72,6 +63,11 @@ public class EscaperNodeVisitor extends AbstractNodeVisitor {
         strategies.pop();
     }
 
+    /**
+     * Simply wraps the input expression with a {@link EscapeFilter}.
+     * @param expression
+     * @return
+     */
     private Expression<?> escape(Expression<?> expression) {
 
         /*
@@ -81,14 +77,14 @@ public class EscaperNodeVisitor extends AbstractNodeVisitor {
         List<NamedArgumentNode> namedArgs = new ArrayList<>();
         if (!strategies.isEmpty() && strategies.peek() != null) {
             String strategy = strategies.peek();
-            namedArgs.add(new NamedArgumentNode("strategy", new LiteralStringExpression(strategy)));
+            namedArgs.add(new NamedArgumentNode("strategy", new LiteralStringExpression(strategy, expression.getLineNumber())));
         }
-        ArgumentsNode args = new ArgumentsNode(null, namedArgs);
+        ArgumentsNode args = new ArgumentsNode(null, namedArgs, expression.getLineNumber());
 
         /*
          * Create the filter invocation with the newly created named arguments.
          */
-        FilterInvocationExpression filter = new FilterInvocationExpression("escape", args);
+        FilterInvocationExpression filter = new FilterInvocationExpression("escape", args, expression.getLineNumber());
 
         /*
          * The given expression and the filter invocation now become a binary
@@ -103,7 +99,7 @@ public class EscaperNodeVisitor extends AbstractNodeVisitor {
     private boolean isSafe(Expression<?> expression) {
 
         // check whether the autoescaper is even active
-        if (!active.isEmpty() && active.peek() == false) {
+        if (!active.isEmpty() && !active.peek()) {
             return true;
         }
 
@@ -113,27 +109,11 @@ public class EscaperNodeVisitor extends AbstractNodeVisitor {
         if (expression instanceof LiteralStringExpression) {
             safe = true;
         }
-        // function and macro calls are considered safe
-        else if (expression instanceof FunctionOrMacroInvocationExpression
-                || expression instanceof ParentFunctionExpression || expression instanceof BlockFunctionExpression) {
+        else if (expression instanceof ParentFunctionExpression || expression instanceof BlockFunctionExpression) {
             safe = true;
-        } else if (expression instanceof FilterExpression) {
-
-            // certain filters do not need to be escaped
-            FilterExpression binary = (FilterExpression) expression;
-            FilterInvocationExpression filterInvocation = (FilterInvocationExpression) binary.getRightExpression();
-            String filterName = filterInvocation.getFilterName();
-
-            if (safeFilters.contains(filterName)) {
-                safe = true;
-            }
         }
 
         return safe;
-    }
-
-    public void addSafeFilter(String filter) {
-        this.safeFilters.add(filter);
     }
 
     public void pushAutoEscapeState(boolean auto) {

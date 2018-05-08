@@ -11,12 +11,9 @@ package com.mitchellbosecke.pebble.template;
 import java.io.IOException;
 import java.io.Writer;
 
-import com.mitchellbosecke.pebble.error.PebbleException;
-
 public interface Block {
 
-    public String getName();
+    String getName();
 
-    public void evaluate(PebbleTemplateImpl self, Writer writer, EvaluationContext context) throws PebbleException,
-            IOException;
+    void evaluate(PebbleTemplateImpl self, Writer writer, EvaluationContext context) throws IOException;
 }

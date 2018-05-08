@@ -1,7 +1,12 @@
 package com.mitchellbosecke.pebble.loader;
 
+import com.mitchellbosecke.pebble.error.LoaderException;
+import com.mitchellbosecke.pebble.utils.PathUtils;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -9,18 +14,12 @@ import java.io.UnsupportedEncodingException;
 
 import javax.servlet.ServletContext;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.mitchellbosecke.pebble.error.LoaderException;
-
 /**
  * Loader that uses a servlet context to find templates.
- * 
- * @author mbosecke
  *
+ * @author mbosecke
  */
-public class ServletLoader implements Loader {
+public class ServletLoader implements Loader<String> {
 
     private static final Logger logger = LoggerFactory.getLogger(ServletLoader.class);
 
@@ -30,6 +29,8 @@ public class ServletLoader implements Loader {
 
     private String charset = "UTF-8";
 
+    private char expectedSeparator = '/';
+
     private final ServletContext context;
 
     public ServletLoader(ServletContext context) {
@@ -37,25 +38,29 @@ public class ServletLoader implements Loader {
     }
 
     @Override
-    public Reader getReader(String templateName) throws LoaderException {
+    public Reader getReader(String templateName) {
 
         InputStreamReader isr = null;
         Reader reader = null;
 
         InputStream is = null;
 
-        // Add the prefix and make sure that it ends with a separater character
-        StringBuilder path = new StringBuilder("");
+        // Add the prefix and make sure that it ends with a separator character
+        StringBuilder path = new StringBuilder(128);
         if (getPrefix() != null) {
 
             path.append(getPrefix());
 
-            if (!getPrefix().endsWith(String.valueOf(File.separatorChar))) {
-                path.append(File.separatorChar);
+            // we do NOT use OS dependent separators here; getResourceAsStream
+            // explicitly requires forward slashes.
+            if (!getPrefix().endsWith(Character.toString(expectedSeparator))) {
+                path.append(expectedSeparator);
             }
         }
-
-        String location = path.toString() + templateName + (getSuffix() == null ? "" : getSuffix());
+        path.append(templateName);
+        if (getSuffix() != null)
+            path.append(getSuffix());
+        String location = path.toString();
         logger.debug("Looking for template in {}.", location);
 
         is = context.getResourceAsStream(location);
@@ -98,6 +103,16 @@ public class ServletLoader implements Loader {
     @Override
     public void setCharset(String charset) {
         this.charset = charset;
+    }
+
+    @Override
+    public String resolveRelativePath(String relativePath, String anchorPath) {
+        return PathUtils.resolveRelativePath(relativePath, anchorPath, expectedSeparator);
+    }
+
+    @Override
+    public String createCacheKey(String templateName) {
+        return templateName;
     }
 
 }

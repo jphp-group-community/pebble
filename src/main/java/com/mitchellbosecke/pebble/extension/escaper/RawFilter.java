@@ -20,12 +20,8 @@ public class RawFilter implements Filter {
     }
 
     public Object apply(Object inputObject, Map<String, Object> args) {
-        /*
-         * Doesn't actually do anything to the input. This filter's existence is
-         * enough for the EscaperNodeVisitor to know not to escape this
-         * expression.
-         */
-        return inputObject;
+        return inputObject == null ? null : new SafeString(inputObject.toString());
+
     }
 
 }

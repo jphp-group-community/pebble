@@ -1,25 +1,22 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.extension.core;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import com.mitchellbosecke.pebble.extension.AbstractExtension;
 import com.mitchellbosecke.pebble.extension.Filter;
 import com.mitchellbosecke.pebble.extension.Function;
-import com.mitchellbosecke.pebble.extension.NodeVisitor;
+import com.mitchellbosecke.pebble.extension.NodeVisitorFactory;
 import com.mitchellbosecke.pebble.extension.Test;
 import com.mitchellbosecke.pebble.node.expression.AddExpression;
 import com.mitchellbosecke.pebble.node.expression.AndExpression;
+import com.mitchellbosecke.pebble.node.expression.ConcatenateExpression;
+import com.mitchellbosecke.pebble.node.expression.ContainsExpression;
 import com.mitchellbosecke.pebble.node.expression.DivideExpression;
 import com.mitchellbosecke.pebble.node.expression.EqualsExpression;
 import com.mitchellbosecke.pebble.node.expression.FilterExpression;
@@ -33,6 +30,7 @@ import com.mitchellbosecke.pebble.node.expression.NegativeTestExpression;
 import com.mitchellbosecke.pebble.node.expression.NotEqualsExpression;
 import com.mitchellbosecke.pebble.node.expression.OrExpression;
 import com.mitchellbosecke.pebble.node.expression.PositiveTestExpression;
+import com.mitchellbosecke.pebble.node.expression.RangeExpression;
 import com.mitchellbosecke.pebble.node.expression.SubtractExpression;
 import com.mitchellbosecke.pebble.node.expression.UnaryMinusExpression;
 import com.mitchellbosecke.pebble.node.expression.UnaryNotExpression;
@@ -43,10 +41,12 @@ import com.mitchellbosecke.pebble.operator.BinaryOperatorImpl;
 import com.mitchellbosecke.pebble.operator.UnaryOperator;
 import com.mitchellbosecke.pebble.operator.UnaryOperatorImpl;
 import com.mitchellbosecke.pebble.tokenParser.BlockTokenParser;
+import com.mitchellbosecke.pebble.tokenParser.CacheTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.ExtendsTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.FilterTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.FlushTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.ForTokenParser;
+import com.mitchellbosecke.pebble.tokenParser.FromTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.IfTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.ImportTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.IncludeTokenParser;
@@ -54,6 +54,11 @@ import com.mitchellbosecke.pebble.tokenParser.MacroTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.ParallelTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.SetTokenParser;
 import com.mitchellbosecke.pebble.tokenParser.TokenParser;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class CoreExtension extends AbstractExtension {
 
@@ -71,6 +76,8 @@ public class CoreExtension extends AbstractExtension {
         parsers.add(new MacroTokenParser());
         parsers.add(new ParallelTokenParser());
         parsers.add(new SetTokenParser());
+        parsers.add(new CacheTokenParser());
+        parsers.add(new FromTokenParser());
 
         // verbatim tag is implemented directly in the LexerImpl
         return parsers;
@@ -79,7 +86,7 @@ public class CoreExtension extends AbstractExtension {
     @Override
     public List<UnaryOperator> getUnaryOperators() {
         ArrayList<UnaryOperator> operators = new ArrayList<>();
-        operators.add(new UnaryOperatorImpl("not", 5, UnaryNotExpression.class));
+        operators.add(new UnaryOperatorImpl("not", 10, UnaryNotExpression.class));
         operators.add(new UnaryOperatorImpl("+", 500, UnaryPlusExpression.class));
         operators.add(new UnaryOperatorImpl("-", 500, UnaryMinusExpression.class));
         return operators;
@@ -88,10 +95,11 @@ public class CoreExtension extends AbstractExtension {
     @Override
     public List<BinaryOperator> getBinaryOperators() {
         ArrayList<BinaryOperator> operators = new ArrayList<>();
-        operators.add(new BinaryOperatorImpl("or", 10, OrExpression.class, Associativity.LEFT));
-        operators.add(new BinaryOperatorImpl("and", 15, AndExpression.class, Associativity.LEFT));
+        operators.add(new BinaryOperatorImpl("or", 1, OrExpression.class, Associativity.LEFT));
+        operators.add(new BinaryOperatorImpl("and", 5, AndExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("is", 20, PositiveTestExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("is not", 20, NegativeTestExpression.class, Associativity.LEFT));
+        operators.add(new BinaryOperatorImpl("contains", 20, ContainsExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("==", 30, EqualsExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("equals", 30, EqualsExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("!=", 30, NotEqualsExpression.class, Associativity.LEFT));
@@ -105,6 +113,8 @@ public class CoreExtension extends AbstractExtension {
         operators.add(new BinaryOperatorImpl("/", 60, DivideExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("%", 60, ModulusExpression.class, Associativity.LEFT));
         operators.add(new BinaryOperatorImpl("|", 100, FilterExpression.class, Associativity.LEFT));
+        operators.add(new BinaryOperatorImpl("~", 110, ConcatenateExpression.class, Associativity.LEFT));
+        operators.add(new BinaryOperatorImpl("..", 120, RangeExpression.class, Associativity.LEFT));
 
         return operators;
     }
@@ -122,11 +132,17 @@ public class CoreExtension extends AbstractExtension {
         filters.put("last", new LastFilter());
         filters.put("lower", new LowerFilter());
         filters.put("numberformat", new NumberFormatFilter());
+        filters.put("slice", new SliceFilter());
         filters.put("sort", new SortFilter());
+        filters.put("rsort", new RsortFilter());
+        filters.put("reverse", new ReverseFilter());
         filters.put("title", new TitleFilter());
         filters.put("trim", new TrimFilter());
         filters.put("upper", new UpperFilter());
         filters.put("urlencode", new UrlEncoderFilter());
+        filters.put("length", new LengthFilter());
+        filters.put(ReplaceFilter.FILTER_NAME, new ReplaceFilter());
+        filters.put(MergeFilter.FILTER_NAME, new MergeFilter());
         return filters;
     }
 
@@ -136,8 +152,10 @@ public class CoreExtension extends AbstractExtension {
         tests.put("empty", new EmptyTest());
         tests.put("even", new EvenTest());
         tests.put("iterable", new IterableTest());
+        tests.put("map", new MapTest());
         tests.put("null", new NullTest());
         tests.put("odd", new OddTest());
+        tests.put("defined", new DefinedTest());
         return tests;
     }
 
@@ -153,6 +171,7 @@ public class CoreExtension extends AbstractExtension {
 
         functions.put("max", new MaxFunction());
         functions.put("min", new MinFunction());
+        functions.put(RangeFunction.FUNCTION_NAME, new RangeFunction());
         return functions;
     }
 
@@ -161,9 +180,10 @@ public class CoreExtension extends AbstractExtension {
         return null;
     }
 
-    public List<NodeVisitor> getNodeVisitors() {
-        List<NodeVisitor> visitors = new ArrayList<>();
-        visitors.add(new MacroAndBlockRegistrantNodeVisitor());
+    @Override
+    public List<NodeVisitorFactory> getNodeVisitors() {
+        List<NodeVisitorFactory> visitors = new ArrayList<>();
+        visitors.add(new MacroAndBlockRegistrantNodeVisitorFactory());
         return visitors;
     }
 

@@ -8,12 +8,14 @@
  ******************************************************************************/
 package com.mitchellbosecke.pebble.extension.escaper;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 import com.coverity.security.Escape;
 import com.mitchellbosecke.pebble.extension.Filter;
+import com.mitchellbosecke.pebble.utils.StringUtils;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class EscapeFilter implements Filter {
 
@@ -21,8 +23,54 @@ public class EscapeFilter implements Filter {
 
     private final List<String> argumentNames = new ArrayList<>();
 
+    private final Map<String, EscapingStrategy> strategies;
+
     public EscapeFilter() {
+        this.strategies = new HashMap<>();
+        buildDefaultStrategies();
         argumentNames.add("strategy");
+    }
+
+    private void buildDefaultStrategies() {
+        strategies.put("html", new EscapingStrategy() {
+
+            @Override
+            public String escape(String input) {
+                return Escape.htmlText(input);
+            }
+        });
+
+        strategies.put("js", new EscapingStrategy() {
+
+            @Override
+            public String escape(String input) {
+                return Escape.jsString(input);
+            }
+        });
+
+        strategies.put("css", new EscapingStrategy() {
+
+            @Override
+            public String escape(String input) {
+                return Escape.cssString(input);
+            }
+        });
+
+        strategies.put("html_attr", new EscapingStrategy() {
+
+            @Override
+            public String escape(String input) {
+                return Escape.html(input);
+            }
+        });
+
+        strategies.put("url_param", new EscapingStrategy() {
+
+            @Override
+            public String escape(String input) {
+                return Escape.uriParam(input);
+            }
+        });
     }
 
     public List<String> getArgumentNames() {
@@ -30,10 +78,10 @@ public class EscapeFilter implements Filter {
     }
 
     public Object apply(Object inputObject, Map<String, Object> args) {
-        if (!(inputObject instanceof String)) {
+        if (inputObject == null || inputObject instanceof SafeString) {
             return inputObject;
         }
-        String input = (String) inputObject;
+        String input = StringUtils.toString(inputObject);
 
         String strategy = defaultStrategy;
 
@@ -41,26 +89,11 @@ public class EscapeFilter implements Filter {
             strategy = (String) args.get("strategy");
         }
 
-        switch (strategy) {
-        case "html":
-            input = Escape.htmlText(input);
-            break;
-        case "js":
-            input = Escape.jsString(input);
-            break;
-        case "css":
-            input = Escape.cssString(input);
-            break;
-        case "html_attr":
-            input = Escape.html(input);
-            break;
-        case "url_param":
-            input = Escape.uriParam(input);
-        default:
-            throw new RuntimeException("Unknown escaping strategy");
-
+        if (!strategies.containsKey(strategy)) {
+            throw new RuntimeException(String.format("Unknown escaping strategy [%s]", strategy));
         }
-        return input;
+
+        return new SafeString(strategies.get(strategy).escape(input));
     }
 
     public String getDefaultStrategy() {
@@ -71,4 +104,7 @@ public class EscapeFilter implements Filter {
         this.defaultStrategy = defaultStrategy;
     }
 
+    public void addEscapingStrategy(String name, EscapingStrategy strategy) {
+        this.strategies.put(name, strategy);
+    }
 }

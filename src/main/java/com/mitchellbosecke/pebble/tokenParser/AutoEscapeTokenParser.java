@@ -1,26 +1,26 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.tokenParser;
 
-import com.mitchellbosecke.pebble.error.ParserException;
 import com.mitchellbosecke.pebble.lexer.Token;
 import com.mitchellbosecke.pebble.lexer.TokenStream;
 import com.mitchellbosecke.pebble.node.AutoEscapeNode;
 import com.mitchellbosecke.pebble.node.BodyNode;
 import com.mitchellbosecke.pebble.node.RenderableNode;
+import com.mitchellbosecke.pebble.parser.Parser;
 import com.mitchellbosecke.pebble.parser.StoppingCondition;
 
 public class AutoEscapeTokenParser extends AbstractTokenParser {
 
     @Override
-    public RenderableNode parse(Token token) throws ParserException {
-        TokenStream stream = this.parser.getStream();
+    public RenderableNode parse(Token token, Parser parser) {
+        TokenStream stream = parser.getStream();
         int lineNumber = token.getLineNumber();
 
         String strategy = null;
@@ -44,7 +44,7 @@ public class AutoEscapeTokenParser extends AbstractTokenParser {
         stream.expect(Token.Type.EXECUTE_END);
 
         // now we parse the block body
-        BodyNode body = this.parser.subparse(new StoppingCondition() {
+        BodyNode body = parser.subparse(new StoppingCondition() {
 
             @Override
             public boolean evaluate(Token token) {

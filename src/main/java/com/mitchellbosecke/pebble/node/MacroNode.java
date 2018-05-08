@@ -8,19 +8,19 @@
  ******************************************************************************/
 package com.mitchellbosecke.pebble.node;
 
+import com.mitchellbosecke.pebble.extension.NodeVisitor;
+import com.mitchellbosecke.pebble.node.expression.Expression;
+import com.mitchellbosecke.pebble.template.EvaluationContext;
+import com.mitchellbosecke.pebble.template.Macro;
+import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
+import com.mitchellbosecke.pebble.template.ScopeChain;
+
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import com.mitchellbosecke.pebble.error.PebbleException;
-import com.mitchellbosecke.pebble.extension.NodeVisitor;
-import com.mitchellbosecke.pebble.node.expression.Expression;
-import com.mitchellbosecke.pebble.template.EvaluationContext;
-import com.mitchellbosecke.pebble.template.Macro;
-import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
 
 public class MacroNode extends AbstractRenderableNode {
 
@@ -37,8 +37,7 @@ public class MacroNode extends AbstractRenderableNode {
     }
 
     @Override
-    public void render(PebbleTemplateImpl self, Writer writer, EvaluationContext context) throws PebbleException,
-            IOException {
+    public void render(PebbleTemplateImpl self, Writer writer, EvaluationContext context) {
         // do nothing
     }
 
@@ -65,23 +64,23 @@ public class MacroNode extends AbstractRenderableNode {
             }
 
             @Override
-            public String call(PebbleTemplateImpl self, EvaluationContext context, Map<String, Object> macroArgs)
-                    throws PebbleException {
+            public String call(PebbleTemplateImpl self, EvaluationContext context, Map<String, Object> macroArgs) {
                 Writer writer = new StringWriter();
+                ScopeChain scopeChain = context.getScopeChain();
 
                 // scope for default arguments
-                context.pushLocalScope();
+                scopeChain.pushLocalScope();
                 for (NamedArgumentNode arg : getArgs().getNamedArgs()) {
                     Expression<?> valueExpression = arg.getValueExpression();
                     if (valueExpression == null) {
-                        context.put(arg.getName(), null);
+                        scopeChain.put(arg.getName(), null);
                     } else {
-                        context.put(arg.getName(), arg.getValueExpression().evaluate(self, context));
+                        scopeChain.put(arg.getName(), arg.getValueExpression().evaluate(self, context));
                     }
                 }
 
                 // scope for user provided arguments
-                context.pushScope(macroArgs);
+                scopeChain.pushScope(macroArgs);
 
                 try {
                     getBody().render(self, writer, context);
@@ -89,8 +88,8 @@ public class MacroNode extends AbstractRenderableNode {
                     throw new RuntimeException("Could not evaluate macro [" + name + "]", e);
                 }
 
-                context.popScope(); // user arguments
-                context.popScope(); // default arguments
+                scopeChain.popScope(); // user arguments
+                scopeChain.popScope(); // default arguments
 
                 return writer.toString();
             }

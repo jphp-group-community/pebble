@@ -1,14 +1,13 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ *
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.node.expression;
 
-import com.mitchellbosecke.pebble.error.PebbleException;
 import com.mitchellbosecke.pebble.extension.NodeVisitor;
 import com.mitchellbosecke.pebble.node.ArgumentsNode;
 import com.mitchellbosecke.pebble.template.EvaluationContext;
@@ -16,9 +15,9 @@ import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
 
 /**
  * The right hand side to the filter expression.
- * 
+ *
  * @author Mitchell
- * 
+ *
  */
 public class FilterInvocationExpression implements Expression<Object> {
 
@@ -26,13 +25,17 @@ public class FilterInvocationExpression implements Expression<Object> {
 
     private final ArgumentsNode args;
 
-    public FilterInvocationExpression(String filterName, ArgumentsNode args) {
+    private final int lineNumber;
+
+    public FilterInvocationExpression(String filterName, ArgumentsNode args, int lineNumber) {
         this.filterName = filterName;
         this.args = args;
+        this.lineNumber = lineNumber;
     }
 
     @Override
-    public Object evaluate(PebbleTemplateImpl self, EvaluationContext context) throws PebbleException {
+    public Object evaluate(PebbleTemplateImpl self, EvaluationContext context) {
+        // see FilterExpression.java
         throw new UnsupportedOperationException();
     }
 
@@ -46,6 +49,11 @@ public class FilterInvocationExpression implements Expression<Object> {
 
     public String getFilterName() {
         return filterName;
+    }
+
+    @Override
+    public int getLineNumber() {
+        return this.lineNumber;
     }
 
 }

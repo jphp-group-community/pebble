@@ -1,48 +1,46 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ * <p>
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ * <p>
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.parser;
 
-import com.mitchellbosecke.pebble.error.ParserException;
 import com.mitchellbosecke.pebble.lexer.TokenStream;
 import com.mitchellbosecke.pebble.node.BodyNode;
 import com.mitchellbosecke.pebble.node.RootNode;
 
 public interface Parser {
 
-    public RootNode parse(TokenStream stream) throws ParserException;
+    RootNode parse(TokenStream stream);
 
-    public BodyNode subparse() throws ParserException;
+    BodyNode subparse();
 
     /**
      * Provides the stream of tokens which ultimately need to be "parsed" into
      * Nodes.
-     * 
+     *
      * @return TokenStream
      */
-    public TokenStream getStream();
+    TokenStream getStream();
 
     /**
      * Parses the existing TokenStream, starting at the current Token, and
      * ending when the stopCondition is fullfilled.
-     * 
-     * @param stopCondition
-     * @return
-     * @throws ParserException
+     *
+     * @param stopCondition The condition to stop parsing a segment of the template.
+     * @return A node representing the parsed section
      */
-    public BodyNode subparse(StoppingCondition stopCondition) throws ParserException;
+    BodyNode subparse(StoppingCondition stopCondition);
 
-    public ExpressionParser getExpressionParser();
+    ExpressionParser getExpressionParser();
 
-    public String peekBlockStack();
+    String peekBlockStack();
 
-    public String popBlockStack();
+    String popBlockStack();
 
-    public void pushBlockStack(String blockName);
+    void pushBlockStack(String blockName);
 
 }

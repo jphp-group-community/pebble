@@ -16,8 +16,13 @@ import com.mitchellbosecke.pebble.utils.OperatorUtils;
 public class NotEqualsExpression extends BinaryExpression<Boolean> {
 
     @Override
-    public Boolean evaluate(PebbleTemplateImpl self, EvaluationContext context) throws PebbleException {
-        return OperatorUtils.equals(getLeftExpression().evaluate(self, context),
-                getRightExpression().evaluate(self, context)) == false;
+    public Boolean evaluate(PebbleTemplateImpl self, EvaluationContext context) {
+        try{
+            return !OperatorUtils
+                    .equals(getLeftExpression().evaluate(self, context), getRightExpression().evaluate(self, context));
+        }catch(Exception ex){
+            throw new PebbleException(ex, "Could not perform not equals comparison", getLineNumber(), self.getName());
+        }
+
     }
 }

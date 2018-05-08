@@ -1,16 +1,12 @@
 /*******************************************************************************
  * This file is part of Pebble.
- * 
+ * <p>
  * Copyright (c) 2014 by Mitchell Bösecke
- * 
+ * <p>
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  ******************************************************************************/
 package com.mitchellbosecke.pebble.node;
-
-import java.io.IOException;
-import java.io.Writer;
-import java.util.List;
 
 import com.mitchellbosecke.pebble.error.PebbleException;
 import com.mitchellbosecke.pebble.extension.NodeVisitor;
@@ -18,6 +14,10 @@ import com.mitchellbosecke.pebble.node.expression.Expression;
 import com.mitchellbosecke.pebble.template.EvaluationContext;
 import com.mitchellbosecke.pebble.template.PebbleTemplateImpl;
 import com.mitchellbosecke.pebble.utils.Pair;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.util.List;
 
 public class IfNode extends AbstractRenderableNode {
 
@@ -36,15 +36,28 @@ public class IfNode extends AbstractRenderableNode {
     }
 
     @Override
-    public void render(PebbleTemplateImpl self, Writer writer, EvaluationContext context) throws PebbleException,
-            IOException {
+    public void render(PebbleTemplateImpl self, Writer writer, EvaluationContext context) throws IOException {
 
         boolean satisfied = false;
         for (Pair<Expression<?>, BodyNode> ifStatement : conditionsWithBodies) {
 
-            Object result = ifStatement.getLeft().evaluate(self, context);
-            if (result != null)
-                satisfied = (Boolean) result;
+            Expression<?> conditionalExpression = ifStatement.getLeft();
+
+            try {
+
+                Object result = conditionalExpression.evaluate(self, context);
+
+                if (result != null) {
+                    try {
+                        satisfied = (Boolean) result;
+                    } catch (ClassCastException ex) {
+                        throw new PebbleException(ex, "Expected a Boolean in \"if\" statement", getLineNumber(), self.getName());
+                    }
+                }
+
+            } catch (RuntimeException ex) {
+                throw new PebbleException(ex, "Wrong operand(s) type in conditional expression", getLineNumber(), self.getName());
+            }
 
             if (satisfied) {
                 ifStatement.getRight().render(self, writer, context);
