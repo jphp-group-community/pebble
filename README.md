@@ -1,3 +1,6 @@
+https://github.com/jphp-group/pebble   
+https://github.com/PebbleTemplates/pebble
+
 # Pebble ![Continuous Integration](https://api.travis-ci.org/PebbleTemplates/pebble.svg?branch=master)
 
 Pebble is a java templating engine inspired by [Twig](http://twig.sensiolabs.org/). It separates itself from the crowd with it's inheritance feature and it's easy-to-read syntax. It ships with built-in autoescaping for security, and it includes integrated support for internationalization.
